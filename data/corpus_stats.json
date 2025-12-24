@@ -1,0 +1,31 @@
+{
+  "manifest_rows": 105925,
+  "documents_total": 105925,
+  "per_source": {
+    "city_news_yaroslavl": 31222,
+    "kovrovskie_vesti_kovrov": 26537,
+    "newsroom24_nnov": 6662,
+    "serpuhov_admin": 11522,
+    "vladnews_vladivostok": 7285,
+    "zelenograd_silino": 3077,
+    "zelenograd_staroekrukovo": 19620
+  },
+  "raw_html": {
+    "count_nonzero": 105925,
+    "sum_bytes": 5916531092,
+    "avg_bytes": 55855,
+    "median_bytes": 42404,
+    "min_bytes": 178,
+    "max_bytes": 574680
+  },
+  "text": {
+    "count_nonzero": 105925,
+    "sum_bytes": 1016741590,
+    "avg_bytes": 9598,
+    "median_bytes": 7314,
+    "min_bytes": 49,
+    "max_bytes": 207359
+  },
+  "missing_raw_files": 0,
+  "missing_text_files": 0
+}

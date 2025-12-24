@@ -1,0 +1,23 @@
+db:
+  uri: "mongodb://localhost:27017"
+  database: "mai_ir_exp"
+  documents_collection: "documents"
+  frontier_collection: "frontier"
+
+logic:
+  concurrency: 10
+  request_delay_sec: 0.25
+
+  
+  revisit_after_sec: 604800
+
+
+  lease_sec: 120
+  error_backoff_sec: 600
+  reset_stuck_after_sec: 600
+
+  max_depth: 30
+
+  run_forever: false
+
+crawl_config_path: "configs/sources.yaml"

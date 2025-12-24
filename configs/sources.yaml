@@ -1,0 +1,236 @@
+sources:
+  - id: "city_news_yaroslavl"
+    name: "Городские новости (Ярославль)"
+    base_url: "https://city-news.ru"
+    start_urls:
+      - "https://city-news.ru/articles/"
+      - "https://city-news.ru/news/"
+    allowed_domains:
+      - "city-news.ru"
+      - "www.city-news.ru"
+    allow_regex:
+      - "^https?://(www\\.)?city-news\\.ru/articles/?$"
+      - "^https?://(www\\.)?city-news\\.ru/news/.*"
+      - "^https?://(www\\.)?city-news\\.ru/article/.*"
+      - "^https?://(www\\.)?city-news\\.ru/publikatsii/.*"
+    save_regex:
+      - "^https?://(www\\.)?city-news\\.ru/news/.*"
+      - "^https?://(www\\.)?city-news\\.ru/article/.*"
+      - "^https?://(www\\.)?city-news\\.ru/publikatsii/.*"
+    deny_regex:
+      - ".*#.*"
+    crawl_policy:
+      max_pages: 60000
+      max_depth: 10
+      concurrency: 30
+      request_delay_sec: 0.02
+      timeout_sec: 30
+      user_agent: "MAI-IR-Labs/1.0 (educational crawler; contact: your_email@example.com)"
+      accept_only_content_types: ["text/html"]
+      max_response_bytes: 700000
+
+  - id: "kovrovskie_vesti_kovrov"
+    name: "Ковровские вести (Ковров)"
+    base_url: "https://www.xn--b1aaalbpdjc1bbxpfp.xn--p1ai"
+    start_urls:
+      - "https://www.xn--b1aaalbpdjc1bbxpfp.xn--p1ai/allnews/"
+      - "https://www.xn--b1aaalbpdjc1bbxpfp.xn--p1ai/allnews/page/2/"
+      - "https://www.xn--b1aaalbpdjc1bbxpfp.xn--p1ai/allnews/page/10/"
+      - "https://www.xn--b1aaalbpdjc1bbxpfp.xn--p1ai/allnews/page/50/"
+      - "https://www.xn--b1aaalbpdjc1bbxpfp.xn--p1ai/allnews/page/100/"
+      - "https://www.xn--b1aaalbpdjc1bbxpfp.xn--p1ai/allnews/page/200/"
+      - "https://www.xn--b1aaalbpdjc1bbxpfp.xn--p1ai/allnews/page/400/"
+      - "https://www.xn--b1aaalbpdjc1bbxpfp.xn--p1ai/allnews/page/700/"
+      - "https://www.xn--b1aaalbpdjc1bbxpfp.xn--p1ai/allnews/page/900/"
+      - "https://www.xn--b1aaalbpdjc1bbxpfp.xn--p1ai/allnews/page/1083/"
+
+    allowed_domains:
+      - "www.xn--b1aaalbpdjc1bbxpfp.xn--p1ai"
+      - "xn--b1aaalbpdjc1bbxpfp.xn--p1ai"
+    allow_regex:
+      
+      - "^https?://(www\\.)?xn--b1aaalbpdjc1bbxpfp\\.xn--p1ai/allnews(/page/\\d+/)?/?$"
+      - "^https?://(www\\.)?xn--b1aaalbpdjc1bbxpfp\\.xn--p1ai/\\d+-[^/]+\\.html$"
+    save_regex:
+      - "^https?://(www\\.)?xn--b1aaalbpdjc1bbxpfp\\.xn--p1ai/\\d+-[^/]+\\.html$" 
+    deny_regex:
+      - ".*#.*"
+      - ".*\\.(jpg|jpeg|png|gif|webp|svg|mp4|mp3|zip|rar)$"
+      - ".*\\.pdf$"
+    crawl_policy:
+    
+      max_pages: 60000
+      max_depth: 30
+    
+      concurrency: 10
+      request_delay_sec: 0.2
+      timeout_sec: 30
+      user_agent: "MAI-IR-Labs/1.0 (educational crawler; contact: your_email@example.com)"
+      accept_only_content_types: ["text/html"]
+      max_response_bytes: 700000
+
+
+  - id: "zelenograd_staroekrukovo"
+    name: "Интернет-газета района Старое Крюково (Зеленоград)"
+    base_url: "https://staroekrukovo.ru"
+    start_urls:
+      - "https://staroekrukovo.ru/news/allnews/"  
+    allowed_domains:
+      - "staroekrukovo.ru"
+      - "www.staroekrukovo.ru"
+    allow_regex:
+      - "^https?://(www\\.)?staroekrukovo\\.ru/news/.*"
+    save_regex:
+      
+      - "^https?://(www\\.)?staroekrukovo\\.ru/news/(?!allnews/).*" 
+    deny_regex:
+      - ".*#.*"
+    crawl_policy:
+      max_pages: 35000
+      max_depth: 15
+      concurrency: 30
+      request_delay_sec: 0.02
+      timeout_sec: 30
+      user_agent: "MAI-IR-Labs/1.0 (educational crawler; contact: your_email@example.com)"
+      accept_only_content_types: [ "text/html" ]
+      max_response_bytes: 700000
+
+
+  - id: "zelenograd_silino"
+    name: "Наше Силино (Зеленоград) — статьи (/articles/...)"
+    base_url: "https://nashesilino.ru"
+    start_urls:
+      - "https://nashesilino.ru/articles/allnews/?SECTION_CODE=allnews"          
+      - "https://nashesilino.ru/articles/allnews/?SECTION_CODE=allnews&PAGEN_1=1"
+      - "https://nashesilino.ru/articles/allnews/?SECTION_CODE=allnews&PAGEN_1=50"
+      - "https://nashesilino.ru/articles/allnews/?SECTION_CODE=allnews&PAGEN_1=500"
+      - "https://nashesilino.ru/articles/allnews/?SECTION_CODE=allnews&PAGEN_1=1905" 
+    allowed_domains:
+      - "nashesilino.ru"
+      - "www.nashesilino.ru"
+    allow_regex:
+      - "^https?://(www\\.)?nashesilino\\.ru/articles/.*"
+    save_regex:
+      - "^https?://(www\\.)?nashesilino\\.ru/articles/[a-z0-9_-]+/[a-z0-9_-]+/?$"
+    deny_regex:
+      - ".*#.*"
+      - ".*\\?(?!SECTION_CODE=[a-z0-9_-]+(&PAGEN_1=\\d+)?$|show_news=\\d{6}(&SECTION_CODE=[a-z0-9_-]+)?(&PAGEN_1=\\d+)?$).*"
+      - ".*\\.(jpg|jpeg|png|gif|webp|svg|mp4|mp3|pdf|zip|rar)$"
+    crawl_policy:
+      max_pages: 60000
+      max_depth: 25
+      concurrency: 10
+      request_delay_sec: 0.25
+      timeout_sec: 30
+      user_agent: "MAI-IR-Labs/1.0 (educational crawler; contact: your_email@example.com)"
+      accept_only_content_types: [ "text/html" ]
+      max_response_bytes: 700000
+
+
+  - id: "vladnews_vladivostok"
+    name: "VladNews (Владивосток) — новости"
+    base_url: "https://vladnews.ru"
+    start_urls:
+      - "https://vladnews.ru/"       
+      - "https://vladnews.ru/archive"
+    allowed_domains:
+      - "vladnews.ru"
+      - "www.vladnews.ru"
+    allow_regex:
+      - "^https?://(www\\.)?vladnews\\.ru/.*"
+    save_regex:
+  
+      - "^https?://(www\\.)?vladnews\\.ru/\\d{4}-\\d{2}-\\d{2}/\\d+/[^/?#]+/?$"
+    deny_regex:
+      - ".*#.*"
+      - ".*\\.(jpg|jpeg|png|gif|webp|svg|mp4|mp3|pdf|zip|rar)$"
+    crawl_policy:
+      max_pages: 60000
+      max_depth: 20
+      concurrency: 20
+      request_delay_sec: 0.2
+      timeout_sec: 30
+      user_agent: "MAI-IR-Labs/1.0 (educational crawler; contact: your_email@example.com)"
+      accept_only_content_types: [ "text/html" ]
+      max_response_bytes: 700000
+
+
+
+  - id: "newsroom24_nnov"
+    name: "Newsroom24 (Нижний Новгород) — новости"
+    base_url: "https://newsroom24.ru"
+    start_urls:
+      - "https://newsroom24.ru/news/?PAGEN_1=1"
+      - "https://newsroom24.ru/news/zhizn/?PAGEN_1=1"       
+      - "https://newsroom24.ru/news/criminal/?PAGEN_1=1"    
+      - "https://newsroom24.ru/news/transport/?PAGEN_1=1"
+      - "https://newsroom24.ru/news/sport/?PAGEN_1=1"
+      - "https://newsroom24.ru/news/technologies/?PAGEN_1=1"
+    allowed_domains:
+      - "newsroom24.ru"
+      - "www.newsroom24.ru"
+    allow_regex:
+      - "^https?://(www\\.)?newsroom24\\.ru/news/.*"
+    save_regex:
+      - "^https?://(www\\.)?newsroom24\\.ru/news/[a-z0-9_-]+/\\d{4}/news_\\d+/?$"  
+      - "^https?://(www\\.)?newsroom24\\.ru/news/[a-z0-9_-]+/\\d+/?$"
+    deny_regex:
+      - ".*#.*"
+    crawl_policy:
+      max_pages: 60000
+      max_depth: 20
+      concurrency: 30
+      request_delay_sec: 0.02
+      timeout_sec: 30
+      user_agent: "MAI-IR-Labs/1.0 (educational crawler; contact: your_email@example.com)"
+      accept_only_content_types: [ "text/html" ]
+      max_response_bytes: 700000
+
+  - id: "serpuhov_admin"
+    name: "Администрация Серпухова — /novosti (лента) + /news (карточки)"
+    base_url: "https://serpuhov.ru"
+    start_urls:
+      - "https://serpuhov.ru/novosti/?PAGEN_2=1"
+    allowed_domains:
+      - "serpuhov.ru"
+      - "www.serpuhov.ru"
+    allow_regex:
+      - "^https?://(www\\.)?serpuhov\\.ru/novosti/.*"   
+      - "^https?://(www\\.)?serpuhov\\.ru/news/.*"      
+    save_regex:
+      - "^https?://(www\\.)?serpuhov\\.ru/news/[a-z0-9_-]+/?$"  
+    deny_regex:
+      - ".*#.*"
+      
+      - "^https?://(www\\.)?serpuhov\\.ru/news/[^?]+\\?.*$"
+      - ".*\\.(jpg|jpeg|png|gif|webp|svg|mp4|mp3|pdf|zip|rar)$"
+    crawl_policy:
+      max_pages: 60000
+      max_depth: 30
+      concurrency: 10
+      request_delay_sec: 0.25
+      timeout_sec: 30
+      user_agent: "MAI-IR-Labs/1.0 (educational crawler; contact: your_email@example.com)"
+      accept_only_content_types: [ "text/html" ]
+      max_response_bytes: 700000
+
+
+
+storage:
+  data_dir: "data"
+  raw_html_dir: "data/raw_html"
+  meta_dir: "data/meta"
+  extract_text: false
+  text_dir: "data/text"
+  manifest_path: "data/manifest.csv"
+  normalize_to_utf8: true
+
+deduplication:
+  enabled: true
+  url_normalization:
+    drop_fragment: true
+    drop_query: false
+  content_hash:
+    algorithm: "sha256"
+    mode: "text"
+

@@ -1,0 +1,15 @@
+data/meta/
+data/raw_html/
+data/text/
+data/manifest.csv
+index/inv.bin
+index/fwd.bin
+scripts/bootstrap_mongo_from_lr1.py
+configs/robot.yaml
+bson-1.0.dll
+mongoc-1.0.dll
+utf8proc.dll
+**/__pycache__/
+*.py[cod]
+.idea
+.venv

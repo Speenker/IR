@@ -187,6 +187,38 @@ static void ru_stem_inplace(char* s) {
     }
 }
 
+static void encode_delta_vbyte(const uint32_t* docs, uint32_t n, uint8_t** out_buf, size_t* out_len) {
+    if (n == 0) {
+        *out_buf = NULL;
+        *out_len = 0;
+        return;
+    }
+    size_t max_len = 5 * (size_t)(n + 1);
+    uint8_t* buf = (uint8_t*)xmalloc(max_len);
+    size_t pos = 0;
+    uint32_t x = docs[0];
+    do {
+        uint8_t b = x & 0x7F;
+        x >>= 7;
+        if (x == 0) b |= 0x80;
+        buf[pos++] = b;
+    } while (x > 0);
+    uint32_t prev = docs[0];
+    for (uint32_t i = 1; i < n; i++) {
+        uint32_t delta = docs[i] - prev;
+        prev = docs[i];
+        x = delta;
+        do {
+            uint8_t b = x & 0x7F;
+            x >>= 7;
+            if (x == 0) b |= 0x80;
+            buf[pos++] = b;
+        } while (x > 0);
+    }
+    *out_len = pos;
+    *out_buf = (uint8_t*)xrealloc(buf, pos);
+}
+
 
 struct TermEntry {
     char* term;
@@ -394,21 +426,38 @@ static int write_inverted(const char* path, TermPtr* terms, uint32_t term_count,
     InvHeader hdr;
     std::memset(&hdr, 0, sizeof(hdr));
     hdr.magic[0]='I'; hdr.magic[1]='N'; hdr.magic[2]='V'; hdr.magic[3]='1';
-    hdr.version = 1;
+    hdr.version = 2;
     hdr.term_count = term_count;
     hdr.doc_count = doc_count;
 
-    std::fwrite(&hdr, sizeof(hdr), 1, f); 
+    std::fwrite(&hdr, sizeof(hdr), 1, f);
 
     hdr.postings_off = (uint64_t)std::ftell(f);
 
-   
+    uint64_t total_uncomp = 0, total_comp = 0;
+
     for (uint32_t i = 0; i < term_count; i++) {
         terms[i].postings_off = (uint64_t)std::ftell(f);
         TermEntry* e = terms[i].e;
-        write_u32(f, e->df);
-        if (e->df) std::fwrite(e->docs, sizeof(uint32_t), e->df, f);
+        if (e->df == 0) {
+            write_u32(f, 0); 
+            write_u32(f, 0); 
+        } else {
+            uint8_t* cbuf;
+            size_t clen;
+            encode_delta_vbyte(e->docs, e->df, &cbuf, &clen);
+            write_u32(f, e->df);
+            write_u32(f, (uint32_t)clen);
+            std::fwrite(cbuf, 1, clen, f);
+            std::free(cbuf);
+            total_uncomp += (uint64_t)e->df * 4;
+            total_comp += clen;
+        }
     }
+
+    std::fprintf(stderr, "Postings uncompressed: %llu bytes\n", total_uncomp);
+    std::fprintf(stderr, "Postings compressed: %llu bytes\n", total_comp);
+    std::fprintf(stderr, "Compression ratio: %.2f\n", total_uncomp > 0 ? (double)total_comp / total_uncomp : 0);
 
     hdr.dict_off = (uint64_t)std::ftell(f);
 

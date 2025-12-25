@@ -100,6 +100,30 @@ static uint32_t yo_to_e(uint32_t cp){
     return cp;
 }
 
+static uint32_t* decode_delta_vbyte(const uint8_t* buf, size_t len, uint32_t n) {
+    uint32_t* docs = (uint32_t*)xmalloc(sizeof(uint32_t) * (size_t)n);
+    size_t pos = 0;
+    uint32_t idx = 0;
+    while (idx < n && pos < len) {
+        uint32_t x = 0;
+        int shift = 0;
+        while (pos < len) {
+            uint8_t b = buf[pos++];
+            x |= (uint32_t)(b & 0x7F) << shift;
+            if (b & 0x80) break;
+            shift += 7;
+            if (shift >= 32) break; 
+        }
+        if (idx == 0) {
+            docs[0] = x;
+        } else {
+            docs[idx] = docs[idx - 1] + x;
+        }
+        idx++;
+    }
+    return docs;
+}
+
 static void ru_stem_inplace(char* s) {
     int len = (int)std::strlen(s);
     if (len <= 3) return;
@@ -172,10 +196,20 @@ static int dict_find(Index* idx, const char* term){
 static uint32_t* load_postings(Index* idx, uint64_t off, uint32_t* out_n){
     std::fseek(idx->finv, (long)off, SEEK_SET);
     uint32_t df=read_u32(idx->finv);
-    uint32_t* a=(uint32_t*)xmalloc(sizeof(uint32_t)* (size_t)df);
-    if(df) std::fread(a, sizeof(uint32_t), df, idx->finv);
-    *out_n=df;
-    return a;
+    if (idx->ih.version == 1) {
+        uint32_t* a=(uint32_t*)xmalloc(sizeof(uint32_t)* (size_t)df);
+        if(df) std::fread(a, sizeof(uint32_t), df, idx->finv);
+        *out_n=df;
+        return a;
+    } else {
+        uint32_t clen=read_u32(idx->finv);
+        uint8_t* cbuf=(uint8_t*)xmalloc((size_t)clen);
+        if(clen) std::fread(cbuf, 1, (size_t)clen, idx->finv);
+        uint32_t* a=decode_delta_vbyte(cbuf, (size_t)clen, df);
+        std::free(cbuf);
+        *out_n=df;
+        return a;
+    }
 }
 
 

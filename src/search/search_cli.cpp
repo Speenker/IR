@@ -46,6 +46,11 @@ struct DictEntry {
     uint64_t postings_off;
 };
 
+struct Posting {
+    uint32_t docid;
+    uint32_t tf;
+};
+
 struct Index {
     FILE* finv;
     FILE* ffwd;
@@ -54,9 +59,10 @@ struct Index {
     DictEntry* dict;
     uint32_t dict_n;
 
-    uint64_t* fwd_offsets;   
+    uint64_t* fwd_offsets;
     uint32_t all_docs_n;
-    uint32_t* all_docs;      
+    uint32_t* all_docs;
+    uint32_t* doc_lengths; 
 };
 
 
@@ -100,28 +106,67 @@ static uint32_t yo_to_e(uint32_t cp){
     return cp;
 }
 
-static uint32_t* decode_delta_vbyte(const uint8_t* buf, size_t len, uint32_t n) {
-    uint32_t* docs = (uint32_t*)xmalloc(sizeof(uint32_t) * (size_t)n);
+
+static double simple_log(double x) {
+    if (x <= 0) return 0.0;
+    
+
+    double y = x - 1.0;
+    if (y > 1.0) {
+
+        return simple_log(x / 2.0) + 0.693147;
+    }
+    
+    double result = 0.0;
+    double term = y;
+    int n = 1;
+    
+    while (n < 50 && term > 1e-10) {
+        if (n % 2 == 1) {
+            result += term / n;
+        }
+        term *= y;
+        n++;
+    }
+    
+    return result;
+}
+
+static Posting* decode_delta_vbyte_postings(const uint8_t* buf, size_t len, uint32_t n) {
+    Posting* postings = (Posting*)xmalloc(sizeof(Posting) * (size_t)n);
     size_t pos = 0;
     uint32_t idx = 0;
     while (idx < n && pos < len) {
         uint32_t x = 0;
         int shift = 0;
+       
         while (pos < len) {
             uint8_t b = buf[pos++];
             x |= (uint32_t)(b & 0x7F) << shift;
             if (b & 0x80) break;
             shift += 7;
-            if (shift >= 32) break; 
+            if (shift >= 32) break;
         }
         if (idx == 0) {
-            docs[0] = x;
+            postings[0].docid = x;
         } else {
-            docs[idx] = docs[idx - 1] + x;
+            postings[idx].docid = postings[idx - 1].docid + x;
         }
+        
+       
+        x = 0;
+        shift = 0;
+        while (pos < len) {
+            uint8_t b = buf[pos++];
+            x |= (uint32_t)(b & 0x7F) << shift;
+            if (b & 0x80) break;
+            shift += 7;
+            if (shift >= 32) break;
+        }
+        postings[idx].tf = x;
         idx++;
     }
-    return docs;
+    return postings;
 }
 
 static void ru_stem_inplace(char* s) {
@@ -205,8 +250,11 @@ static uint32_t* load_postings(Index* idx, uint64_t off, uint32_t* out_n){
         uint32_t clen=read_u32(idx->finv);
         uint8_t* cbuf=(uint8_t*)xmalloc((size_t)clen);
         if(clen) std::fread(cbuf, 1, (size_t)clen, idx->finv);
-        uint32_t* a=decode_delta_vbyte(cbuf, (size_t)clen, df);
+        Posting* postings=decode_delta_vbyte_postings(cbuf, (size_t)clen, df);
         std::free(cbuf);
+        uint32_t* a=(uint32_t*)xmalloc(sizeof(uint32_t)*(size_t)df);
+        for(uint32_t i=0;i<df;i++) a[i]=postings[i].docid;
+        std::free(postings);
         *out_n=df;
         return a;
     }
@@ -221,19 +269,55 @@ static uint64_t fwd_offset(Index* idx, uint32_t docid){
 static int fwd_get(Index* idx, uint32_t docid, char* title, int title_cap, char* url, int url_cap){
     uint64_t off=fwd_offset(idx, docid);
     if(off==0) return 0;
+    
     std::fseek(idx->ffwd, (long)off, SEEK_SET);
     uint32_t did=read_u32(idx->ffwd);
-    if(did!=docid) {  }
+    if(did!=docid) return 0;
+    
+
     uint16_t ulen=read_u16(idx->ffwd);
-    int ur = (ulen < (uint16_t)(url_cap-1)) ? (int)ulen : (url_cap-1);
-    if(ur>0) std::fread(url,1,(size_t)ur,idx->ffwd);
-    url[ur]=0;
-    if(ulen > (uint16_t)ur) std::fseek(idx->ffwd, (long)(ulen-ur), SEEK_CUR);
+    if(ulen >= (uint16_t)(url_cap-1)) {
+
+        int ur = url_cap - 1;
+        if(ur > 0) {
+            std::fread(url,1,(size_t)ur,idx->ffwd);
+            url[ur]=0;
+        }
+
+        if(ulen > (uint16_t)ur) std::fseek(idx->ffwd, (long)(ulen-ur), SEEK_CUR);
+    } else {
+        int ur = (int)ulen;
+        if(ur>0) {
+            size_t read_bytes = std::fread(url,1,(size_t)ur,idx->ffwd);
+            if((size_t)read_bytes != (size_t)ur) return 0;
+        }
+        url[ur]=0;
+    }
+
 
     uint16_t tlen=read_u16(idx->ffwd);
-    int tr = (tlen < (uint16_t)(title_cap-1)) ? (int)tlen : (title_cap-1);
-    if(tr>0) std::fread(title,1,(size_t)tr,idx->ffwd);
-    title[tr]=0;
+    if(tlen >= (uint16_t)(title_cap-1)) {
+
+        int tr = title_cap - 1;
+        if(tr > 0) {
+            std::fread(title,1,(size_t)tr,idx->ffwd);
+            title[tr]=0;
+        }
+
+        if(tlen > (uint16_t)tr) std::fseek(idx->ffwd, (long)(tlen-tr), SEEK_CUR);
+    } else {
+        int tr = (int)tlen;
+        if(tr>0) {
+            size_t read_bytes = std::fread(title,1,(size_t)tr,idx->ffwd);
+            if((size_t)read_bytes != (size_t)tr) return 0;
+        }
+        title[tr]=0;
+    }
+    
+
+    uint32_t doc_len = read_u32(idx->ffwd);
+    (void)doc_len;
+    
     return 1;
 }
 
@@ -378,6 +462,82 @@ static Tok* to_postfix(const Tok* in, uint32_t nin, uint32_t* out_n){
 
 
 struct List { uint32_t* a; uint32_t n; };
+
+struct RankedResult {
+    uint32_t docid;
+    double score;
+};
+
+static int cmp_ranked(const void* a, const void* b){
+    const RankedResult* x=(const RankedResult*)a;
+    const RankedResult* y=(const RankedResult*)b;
+    if (x->score > y->score) return -1;
+    if (x->score < y->score) return 1;
+    return 0;
+}
+
+static void quick_sort(RankedResult* arr, int left, int right) {
+    if (left >= right) return;
+    
+    int i = left, j = right;
+    RankedResult pivot = arr[(left + right) / 2];
+    
+    while (i <= j) {
+        while (arr[i].score > pivot.score) i++;
+        while (arr[j].score < pivot.score) j--;
+        
+        if (i <= j) {
+            RankedResult temp = arr[i];
+            arr[i] = arr[j];
+            arr[j] = temp;
+            i++;
+            j--;
+        }
+    }
+    
+    if (left < j) quick_sort(arr, left, j);
+    if (i < right) quick_sort(arr, i, right);
+}
+
+static double compute_tf_idf(Index* idx, uint32_t docid, const char* term){
+    int pos=dict_find(idx, term);
+    if(pos<0) return 0.0;
+    
+
+    std::fseek(idx->finv, (long)idx->dict[pos].postings_off, SEEK_SET);
+    uint32_t df=read_u32(idx->finv);
+    uint32_t tf_value = 0;
+    
+    if (idx->ih.version == 1) {
+
+        tf_value = 1;
+    } else {
+
+        uint32_t clen=read_u32(idx->finv);
+        uint8_t* cbuf=(uint8_t*)xmalloc((size_t)clen);
+        if(clen) std::fread(cbuf, 1, (size_t)clen, idx->finv);
+        
+        Posting* postings=decode_delta_vbyte_postings(cbuf, (size_t)clen, df);
+        std::free(cbuf);
+        
+
+        for(uint32_t i=0;i<df;i++){
+            if(postings[i].docid==docid){
+                tf_value = postings[i].tf;
+                break;
+            }
+        }
+        std::free(postings);
+    }
+    
+    if(tf_value == 0) return 0.0;
+    
+
+    double tf_score = 1.0 + simple_log((double)tf_value);
+    double idf_score = simple_log((double)idx->ih.doc_count / (double)idx->dict[pos].df);
+    
+    return tf_score * idf_score;
+}
 
 static List* stack_push(List* st, uint32_t* n, uint32_t* cap, List x){
     if(*n>=*cap){ *cap=(*cap?(*cap*2):64); st=(List*)xrealloc(st,sizeof(List)*(size_t)(*cap)); }
@@ -536,12 +696,20 @@ int main(int argc, char** argv){
         while(L>0 && (q[L-1]=='\r'||q[L-1]=='\n')) q[--L]=0;
         if(L==0) continue;
 
+
+        int has_boolean = 0;
+        for(const char* p=q; *p; p++){
+            if((p[0]=='&' && p[1]=='&') || (p[0]=='|' && p[1]=='|') || *p=='!'){
+                has_boolean = 1;
+                break;
+            }
+        }
+
         uint32_t n0=0;
         Tok* t0=tokenize_basic(q, &n0, 1);
         uint32_t n1=0;
         Tok* t1=inject_implicit_and(t0, n0, &n1);
-        std::free(t0); 
-
+        std::free(t0);
 
         uint32_t npf=0;
         Tok* pf=to_postfix(t1, n1, &npf);
@@ -549,26 +717,100 @@ int main(int argc, char** argv){
 
         List res = eval_postfix(&idx, pf, npf);
 
-       
-
         for(uint32_t i=0;i<npf;i++) if(pf[i].t==T_TERM && pf[i].s) std::free(pf[i].s);
         std::free(pf);
 
-       
         if (offset < 0) offset = 0;
         if (limit <= 0) limit = 50;
 
-        uint32_t shown = 0;
-        for (uint32_t i = (uint32_t)offset; i < res.n && shown < (uint32_t)limit; i++) {
-            char title[512], urlbuf[2048];
-            if (fwd_get(&idx, res.a[i], title, (int)sizeof(title), urlbuf, (int)sizeof(urlbuf))) {
-                std::printf("%u\t%s\t%s\n", res.a[i], title, urlbuf);
-                shown++;
+        if (has_boolean || res.n == 0) {
+
+            uint32_t shown = 0;
+            for (uint32_t i = (uint32_t)offset; i < res.n && shown < (uint32_t)limit; i++) {
+                char title[512], urlbuf[2048];
+                if (fwd_get(&idx, res.a[i], title, (int)sizeof(title), urlbuf, (int)sizeof(urlbuf))) {
+                    std::printf("%u\t%s\t%s\n", res.a[i], title, urlbuf);
+                    shown++;
+                }
+            }
+            std::free(res.a);
+        } else {
+
+            if (res.n > 0) {
+
+                char temp_terms[64][256];
+                int terms_count = 0;
+                
+
+                const char* p = q;
+                char word[256];
+                int wlen = 0;
+                
+                for (; *p && terms_count < 64; p++) {
+                    if (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') {
+                        if (wlen > 0) {
+                            word[wlen] = 0;
+                            char* norm = normalize_term(word, 1);
+                            if (strlen(norm) > 0) {
+                                strcpy(temp_terms[terms_count++], norm);
+                            }
+                            std::free(norm);
+                            wlen = 0;
+                        }
+                    } else if (wlen < 255) {
+                        word[wlen++] = *p;
+                    }
+                }
+                
+                if (wlen > 0) {
+                    word[wlen] = 0;
+                    char* norm = normalize_term(word, 1);
+                    if (strlen(norm) > 0) {
+                        strcpy(temp_terms[terms_count++], norm);
+                    }
+                    std::free(norm);
+                }
+                
+                if (terms_count > 0) {
+
+                    RankedResult* results = (RankedResult*)xmalloc(sizeof(RankedResult) * (size_t)res.n);
+                    uint32_t valid_count = 0;
+                    
+                    for (uint32_t i = 0; i < res.n; i++) {
+                        uint32_t docid = res.a[i];
+                        double total_score = 0.0;
+                        
+                        for (int j = 0; j < terms_count; j++) {
+                            total_score += compute_tf_idf(&idx, docid, temp_terms[j]);
+                        }
+                        
+                        if (total_score > 0.0) {
+                            results[valid_count].docid = docid;
+                            results[valid_count].score = total_score;
+                            valid_count++;
+                        }
+                    }
+                    
+                    std::free(res.a);
+                    
+                    quick_sort(results, 0, (int)valid_count - 1);
+                    
+                    uint32_t shown = 0;
+                    for (uint32_t i = (uint32_t)offset; i < valid_count && shown < (uint32_t)limit; i++) {
+                        char title[512], urlbuf[2048];
+                        if (fwd_get(&idx, results[i].docid, title, (int)sizeof(title), urlbuf, (int)sizeof(urlbuf))) {
+                            std::printf("%u\t%.6f\t%s\t%s\n", results[i].docid, results[i].score, title, urlbuf);
+                            shown++;
+                        }
+                    }
+                    
+                    std::free(results);
+                } else {
+                    std::free(res.a);
+                }
             }
         }
 
-
-        std::free(res.a);
         if(!queries_path) std::printf("\n");
     }
 

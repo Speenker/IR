@@ -187,11 +187,62 @@ static void ru_stem_inplace(char* s) {
     }
 }
 
+struct Posting {
+    uint32_t docid;
+    uint32_t tf;
+};
+
+static void encode_delta_vbyte(const Posting* postings, uint32_t n, uint8_t** out_buf, size_t* out_len) {
+    if (n == 0) {
+        *out_buf = NULL;
+        *out_len = 0;
+        return;
+    }
+    size_t max_len = 5 * (size_t)(n * 2 + 1);
+    uint8_t* buf = (uint8_t*)xmalloc(max_len);
+    size_t pos = 0;
+    uint32_t x = postings[0].docid;
+    do {
+        uint8_t b = x & 0x7F;
+        x >>= 7;
+        if (x == 0) b |= 0x80;
+        buf[pos++] = b;
+    } while (x > 0);
+    x = postings[0].tf;
+    do {
+        uint8_t b = x & 0x7F;
+        x >>= 7;
+        if (x == 0) b |= 0x80;
+        buf[pos++] = b;
+    } while (x > 0);
+    uint32_t prev_doc = postings[0].docid;
+    for (uint32_t i = 1; i < n; i++) {
+        uint32_t delta_doc = postings[i].docid - prev_doc;
+        prev_doc = postings[i].docid;
+        x = delta_doc;
+        do {
+            uint8_t b = x & 0x7F;
+            x >>= 7;
+            if (x == 0) b |= 0x80;
+            buf[pos++] = b;
+        } while (x > 0);
+        x = postings[i].tf;
+        do {
+            uint8_t b = x & 0x7F;
+            x >>= 7;
+            if (x == 0) b |= 0x80;
+            buf[pos++] = b;
+        } while (x > 0);
+    }
+    *out_len = pos;
+    *out_buf = (uint8_t*)xrealloc(buf, pos);
+}
+
 
 struct TermEntry {
     char* term;
     uint32_t hash;
-    uint32_t* docs;
+    Posting* postings;
     uint32_t df;
     uint32_t cap;
     TermEntry* next;
@@ -213,7 +264,7 @@ static TermEntry* term_find_or_add(const char* term) {
     e->term = xstrdup(term);
     e->hash = h;
     e->cap = 4;
-    e->docs = (uint32_t*)xmalloc(sizeof(uint32_t) * e->cap);
+    e->postings = (Posting*)xmalloc(sizeof(Posting) * e->cap);
     e->df = 0;
     e->next = term_ht[b];
     term_ht[b] = e;
@@ -222,12 +273,20 @@ static TermEntry* term_find_or_add(const char* term) {
 static void term_add_docid(TermEntry* e, uint32_t docid) {
     if (e->df >= e->cap) {
         e->cap *= 2;
-        e->docs = (uint32_t*)xrealloc(e->docs, sizeof(uint32_t) * e->cap);
+        e->postings = (Posting*)xrealloc(e->postings, sizeof(Posting) * e->cap);
     }
-    e->docs[e->df++] = docid;
+    e->postings[e->df].docid = docid;
+    e->postings[e->df].tf = 1;
+    e->df++;
 }
 static int cmp_u32(const void* a, const void* b) {
     uint32_t x = *(const uint32_t*)a, y = *(const uint32_t*)b;
+    if (x < y) return -1;
+    if (x > y) return 1;
+    return 0;
+}
+static int cmp_posting(const void* a, const void* b) {
+    uint32_t x = ((Posting*)a)->docid, y = ((Posting*)b)->docid;
     if (x < y) return -1;
     if (x > y) return 1;
     return 0;
@@ -239,10 +298,15 @@ static void finalize_postings(uint64_t* out_terms, uint64_t* out_term_chars) {
             tc++;
             tchars += (uint64_t)std::strlen(e->term);
             if (e->df == 0) continue;
-            std::qsort(e->docs, e->df, sizeof(uint32_t), cmp_u32);
+            std::qsort(e->postings, e->df, sizeof(Posting), cmp_posting);
             uint32_t w = 1;
             for (uint32_t i = 1; i < e->df; i++) {
-                if (e->docs[i] != e->docs[w - 1]) e->docs[w++] = e->docs[i];
+                if (e->postings[i].docid == e->postings[w - 1].docid) {
+                    e->postings[w - 1].tf += e->postings[i].tf;
+                } else {
+                    e->postings[w] = e->postings[i];
+                    w++;
+                }
             }
             e->df = w;
         }
@@ -312,10 +376,11 @@ static char* extract_title_from_text(const unsigned char* buf, size_t n, size_t 
 
 static void tokenize_and_index(const unsigned char* s, size_t n,
                                uint32_t docid, int keep_numbers, int yo2e, int min_len,
-                               uint64_t* io_tokens_total, uint64_t* io_token_chars_total) {
+                               uint64_t* io_tokens_total, uint64_t* io_token_chars_total, uint64_t* io_doc_len) {
     char tok[512];
     int tlen_bytes = 0;
     int tlen_chars = 0;
+    uint64_t tok_count = 0;
 
     size_t i = 0;
     while (1) {
@@ -344,6 +409,7 @@ static void tokenize_and_index(const unsigned char* s, size_t n,
                     term_add_docid(e, docid);
                     if (io_tokens_total) (*io_tokens_total)++;
                     if (io_token_chars_total) (*io_token_chars_total) += (uint64_t)tlen_chars;
+                    tok_count++;
                 }
             }
             tlen_bytes = 0;
@@ -361,8 +427,10 @@ static void tokenize_and_index(const unsigned char* s, size_t n,
             term_add_docid(e, docid);
             if (io_tokens_total) (*io_tokens_total)++;
             if (io_token_chars_total) (*io_token_chars_total) += (uint64_t)tlen_chars;
+            tok_count++;
         }
     }
+    if (io_doc_len) *io_doc_len = tok_count;
 }
 
 
@@ -394,21 +462,38 @@ static int write_inverted(const char* path, TermPtr* terms, uint32_t term_count,
     InvHeader hdr;
     std::memset(&hdr, 0, sizeof(hdr));
     hdr.magic[0]='I'; hdr.magic[1]='N'; hdr.magic[2]='V'; hdr.magic[3]='1';
-    hdr.version = 1;
+    hdr.version = 2;
     hdr.term_count = term_count;
     hdr.doc_count = doc_count;
 
-    std::fwrite(&hdr, sizeof(hdr), 1, f); 
+    std::fwrite(&hdr, sizeof(hdr), 1, f);
 
     hdr.postings_off = (uint64_t)std::ftell(f);
 
-   
+    uint64_t total_uncomp = 0, total_comp = 0;
+
     for (uint32_t i = 0; i < term_count; i++) {
         terms[i].postings_off = (uint64_t)std::ftell(f);
         TermEntry* e = terms[i].e;
-        write_u32(f, e->df);
-        if (e->df) std::fwrite(e->docs, sizeof(uint32_t), e->df, f);
+        if (e->df == 0) {
+            write_u32(f, 0); 
+            write_u32(f, 0); 
+        } else {
+            uint8_t* cbuf;
+            size_t clen;
+            encode_delta_vbyte(e->postings, e->df, &cbuf, &clen);
+            write_u32(f, e->df);
+            write_u32(f, (uint32_t)clen);
+            std::fwrite(cbuf, 1, clen, f);
+            std::free(cbuf);
+            total_uncomp += (uint64_t)e->df * 8;
+            total_comp += clen;
+        }
     }
+
+    std::fprintf(stderr, "Postings uncompressed: %llu bytes\n", total_uncomp);
+    std::fprintf(stderr, "Postings compressed: %llu bytes\n", total_comp);
+    std::fprintf(stderr, "Compression ratio: %.2f\n", total_uncomp > 0 ? (double)total_comp / total_uncomp : 0);
 
     hdr.dict_off = (uint64_t)std::ftell(f);
 
@@ -557,7 +642,10 @@ int main(int argc, char** argv) {
         }
         if (!title) title = extract_title_from_text(text, ntext, 200);
 
-       
+        uint64_t doc_len = 0;
+        tokenize_and_index(text, ntext, docid, keep_numbers, yo2e, min_len, &tokens_total, &token_chars_total, &doc_len);
+        std::free(text);
+
         uint64_t rec_off = (uint64_t)std::ftell(fwd);
         offsets[docid] = rec_off;
 
@@ -571,11 +659,9 @@ int main(int argc, char** argv) {
         write_u16(fwd, title_len);
         std::fwrite(title, 1, title_len, fwd);
 
-        std::free(title);
+        write_u32(fwd, (uint32_t)doc_len);
 
-       
-        tokenize_and_index(text, ntext, docid, keep_numbers, yo2e, min_len, &tokens_total, &token_chars_total);
-        std::free(text);
+        std::free(title);
 
         docs++;
         if ((docs % 1000u) == 0u) std::fprintf(stderr, "Processed docs: %llu\n", (unsigned long long)docs);

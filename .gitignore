@@ -6,6 +6,7 @@ index/inv.bin
 index/fwd.bin
 scripts/bootstrap_mongo_from_lr1.py
 configs/robot.yaml
+.pytest_cache/
 bson-1.0.dll
 mongoc-1.0.dll
 utf8proc.dll

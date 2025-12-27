@@ -4,5 +4,8 @@ beautifulsoup4==4.12.3
 charset-normalizer==3.4.0
 motor==3.6.0
 pymongo==4.9.2
+pytest>=7.0.0
+pytest-cov>=4.0.0
+numpy>=1.20.0
 flask
 matplotlib

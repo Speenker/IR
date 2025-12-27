@@ -1,6 +1,7 @@
 from flask import Flask, request
 import subprocess
 import os
+import re
 from urllib.parse import quote_plus
 
 INV = "index/inv.bin"
@@ -8,6 +9,17 @@ FWD = "index/fwd.bin"
 CLI = "./search_cli"      
 
 PAGE_SIZE = 50
+
+def smart_truncate_title(title, max_len=80):
+    if len(title) <= max_len:
+        return title
+    
+    truncated = title[:max_len]
+    last_space = truncated.rfind(' ')
+    if last_space > 30:
+        truncated = truncated[:last_space]
+    
+    return truncated + "..."
 
 app = Flask(__name__)
 
@@ -75,10 +87,12 @@ def search():
 
     items = []
     for docid, title, url, score in rows:
+        display_title = smart_truncate_title(title)
+        
         if score is not None:
-            items.append(f'<div><a href="{url}" target="_blank">{title}</a> <small>({docid}, score: {score})</small></div>')
+            items.append(f'<div><a href="{url}" target="_blank">{display_title}</a> <small>({docid}, score: {score})</small></div>')
         else:
-            items.append(f'<div><a href="{url}" target="_blank">{title}</a> <small>({docid})</small></div>')
+            items.append(f'<div><a href="{url}" target="_blank">{display_title}</a> <small>({docid})</small></div>')
 
     nav = []
     qurl = quote_plus(q)

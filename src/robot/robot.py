@@ -43,10 +43,6 @@ class Robot:
         await self.frontier.ensure_indexes()
 
     async def seed(self) -> None:
-        """
-        Seed'им frontier только разрешёнными стартовыми URL (start_urls),
-        чтобы frontier соответствовал правилам allow/deny.
-        """
         now = int(time.time())
 
         for s in self.crawl_cfg.sources:

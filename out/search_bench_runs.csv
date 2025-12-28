@@ -1,0 +1,91 @@
+query,mode,ok,elapsed_ms,hits,score_min,score_med,score_max,stderr
+серпухов,ranked,1,268.916,50,10.676784,10.754870,15.732907,query> query>
+серпухов,ranked,1,276.441,50,10.676784,10.754870,15.732907,query> query>
+серпухов,ranked,1,275.502,50,10.676784,10.754870,15.732907,query> query>
+серпухов,ranked,1,288.030,50,10.676784,10.754870,15.732907,query> query>
+серпухов,ranked,1,270.967,50,10.676784,10.754870,15.732907,query> query>
+серпухов,ranked,1,282.158,50,10.676784,10.754870,15.732907,query> query>
+серпухов,ranked,1,279.604,50,10.676784,10.754870,15.732907,query> query>
+серпухов,ranked,1,305.644,50,10.676784,10.754870,15.732907,query> query>
+серпухов,ranked,1,267.311,50,10.676784,10.754870,15.732907,query> query>
+серпухов,ranked,1,275.863,50,10.676784,10.754870,15.732907,query> query>
+области,ranked,1,4576.054,50,8.665563,8.665563,10.784011,query> query>
+области,ranked,1,4635.095,50,8.665563,8.665563,10.784011,query> query>
+области,ranked,1,4612.423,50,8.665563,8.665563,10.784011,query> query>
+области,ranked,1,4654.694,50,8.665563,8.665563,10.784011,query> query>
+области,ranked,1,4559.210,50,8.665563,8.665563,10.784011,query> query>
+области,ranked,1,4592.451,50,8.665563,8.665563,10.784011,query> query>
+области,ranked,1,4479.082,50,8.665563,8.665563,10.784011,query> query>
+области,ranked,1,4511.198,50,8.665563,8.665563,10.784011,query> query>
+области,ranked,1,4600.968,50,8.665563,8.665563,10.784011,query> query>
+области,ranked,1,4676.482,50,8.665563,8.665563,10.784011,query> query>
+новости,ranked,1,17488.814,50,0.000141,0.000141,0.000161,query> query>
+новости,ranked,1,17501.473,50,0.000141,0.000141,0.000161,query> query>
+новости,ranked,1,24695.400,50,0.000141,0.000141,0.000161,query> query>
+новости,ranked,1,17373.827,50,0.000141,0.000141,0.000161,query> query>
+новости,ranked,1,17430.673,50,0.000141,0.000141,0.000161,query> query>
+новости,ranked,1,17471.028,50,0.000141,0.000141,0.000161,query> query>
+новости,ranked,1,23017.229,50,0.000141,0.000141,0.000161,query> query>
+новости,ranked,1,24899.934,50,0.000141,0.000141,0.000161,query> query>
+новости,ranked,1,16856.037,50,0.000141,0.000141,0.000161,query> query>
+новости,ranked,1,16857.518,50,0.000141,0.000141,0.000161,query> query>
+серпухов AND области,boolean,1,31.847,0,,,,query> query>
+серпухов AND области,boolean,1,56.018,0,,,,query> query>
+серпухов AND области,boolean,1,44.492,0,,,,query> query>
+серпухов AND области,boolean,1,51.938,0,,,,query> query>
+серпухов AND области,boolean,1,55.382,0,,,,query> query>
+серпухов AND области,boolean,1,41.242,0,,,,query> query>
+серпухов AND области,boolean,1,33.847,0,,,,query> query>
+серпухов AND области,boolean,1,33.500,0,,,,query> query>
+серпухов AND области,boolean,1,33.864,0,,,,query> query>
+серпухов AND области,boolean,1,30.739,0,,,,query> query>
+серпухов OR области,boolean,1,34.681,0,,,,query> query>
+серпухов OR области,boolean,1,30.484,0,,,,query> query>
+серпухов OR области,boolean,1,34.393,0,,,,query> query>
+серпухов OR области,boolean,1,30.269,0,,,,query> query>
+серпухов OR области,boolean,1,35.440,0,,,,query> query>
+серпухов OR области,boolean,1,30.584,0,,,,query> query>
+серпухов OR области,boolean,1,35.858,0,,,,query> query>
+серпухов OR области,boolean,1,32.611,0,,,,query> query>
+серпухов OR области,boolean,1,34.486,0,,,,query> query>
+серпухов OR области,boolean,1,36.254,0,,,,query> query>
+NOT серпухов,boolean,1,30.042,0,,,,query> query>
+NOT серпухов,boolean,1,34.244,0,,,,query> query>
+NOT серпухов,boolean,1,29.630,0,,,,query> query>
+NOT серпухов,boolean,1,29.680,0,,,,query> query>
+NOT серпухов,boolean,1,33.541,0,,,,query> query>
+NOT серпухов,boolean,1,33.028,0,,,,query> query>
+NOT серпухов,boolean,1,31.383,0,,,,query> query>
+NOT серпухов,boolean,1,30.270,0,,,,query> query>
+NOT серпухов,boolean,1,33.529,0,,,,query> query>
+NOT серпухов,boolean,1,31.989,0,,,,query> query>
+премии AND губернатора AND подмосковье,boolean,1,32.357,0,,,,query> query>
+премии AND губернатора AND подмосковье,boolean,1,31.246,0,,,,query> query>
+премии AND губернатора AND подмосковье,boolean,1,31.123,0,,,,query> query>
+премии AND губернатора AND подмосковье,boolean,1,30.485,0,,,,query> query>
+премии AND губернатора AND подмосковье,boolean,1,41.003,0,,,,query> query>
+премии AND губернатора AND подмосковье,boolean,1,32.089,0,,,,query> query>
+премии AND губернатора AND подмосковье,boolean,1,34.115,0,,,,query> query>
+премии AND губернатора AND подмосковье,boolean,1,32.905,0,,,,query> query>
+премии AND губернатора AND подмосковье,boolean,1,31.707,0,,,,query> query>
+премии AND губернатора AND подмосковье,boolean,1,34.766,0,,,,query> query>
+ремонт OR дорога,boolean,1,33.713,0,,,,query> query>
+ремонт OR дорога,boolean,1,32.043,0,,,,query> query>
+ремонт OR дорога,boolean,1,29.336,0,,,,query> query>
+ремонт OR дорога,boolean,1,34.831,0,,,,query> query>
+ремонт OR дорога,boolean,1,35.085,0,,,,query> query>
+ремонт OR дорога,boolean,1,34.015,0,,,,query> query>
+ремонт OR дорога,boolean,1,33.342,0,,,,query> query>
+ремонт OR дорога,boolean,1,30.255,0,,,,query> query>
+ремонт OR дорога,boolean,1,35.867,0,,,,query> query>
+ремонт OR дорога,boolean,1,35.550,0,,,,query> query>
+культура AND музей,ranked,1,34.951,1,21.001515,21.001515,21.001515,query> query>
+культура AND музей,ranked,1,39.361,1,21.001515,21.001515,21.001515,query> query>
+культура AND музей,ranked,1,32.448,1,21.001515,21.001515,21.001515,query> query>
+культура AND музей,ranked,1,33.213,1,21.001515,21.001515,21.001515,query> query>
+культура AND музей,ranked,1,39.086,1,21.001515,21.001515,21.001515,query> query>
+культура AND музей,ranked,1,40.624,1,21.001515,21.001515,21.001515,query> query>
+культура AND музей,ranked,1,35.183,1,21.001515,21.001515,21.001515,query> query>
+культура AND музей,ranked,1,45.477,1,21.001515,21.001515,21.001515,query> query>
+культура AND музей,ranked,1,40.309,1,21.001515,21.001515,21.001515,query> query>
+культура AND музей,ranked,1,33.869,1,21.001515,21.001515,21.001515,query> query>

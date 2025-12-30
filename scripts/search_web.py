@@ -26,8 +26,8 @@ app = Flask(__name__)
 FORM_HTML = """
 <!doctype html>
 <meta charset="utf-8">
-<title>Boolean Search</title>
-<h2>Boolean Search</h2>
+<title>Boolean / TF-IDF Search</title>
+<h2>Boolean / TF-IDF Search</h2>
 <form action="/search" method="get">
   <input type="text" name="q" style="width:650px" value="{q}">
   <button type="submit">Search</button>

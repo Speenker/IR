@@ -61,6 +61,7 @@ class MongoStorage:
                 "url": url,
                 "source_id": source_id,
                 "source_name": source_name,
+                "raw_html": raw_html,
                 "checked_at": checked_at,
                 "status": int(fetched_status),
                 "content_type": content_type,

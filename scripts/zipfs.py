@@ -28,7 +28,6 @@ def read_freqs(path: Path):
 
 
 def subsample_log(ranks, freqs, points=2000):
-    """Берём ~points значений ранга, распределённых логарифмически."""
     n = len(ranks)
     if n <= points:
         return ranks, freqs

@@ -4,21 +4,42 @@ import random
 from pathlib import Path
 
 
-def read_termfreq(path: Path) -> list[tuple[str, int]]:
+# Должно совпадать со списком stopwords в build_index/search_cli. [file:13]
+STOPWORDS = {
+    "и","в","во","не","что","он","на","я","с","со","как","а","то","все","она","так","его","но","да",
+    "ты","к","у","же","вы","за","бы","по","ее","мне","было","вот","от","меня","еще","нет","о","из",
+    "ему","теперь","когда","даже","ну","вдруг","ли","если","уже","или","ни","быть","был","него","до",
+    "вас","нибудь","опять","уж","вам","ведь","там","потом","себя","ничего","ей","может","они","тут",
+    "где","есть","надо","ней","для","мы","тебя","их","чем","была","сам","чтоб","без","будто","чего",
+    "раз","тоже","себе","под","будет","ж","тогда","кто","этот","того","потому","этого","какой","совсем",
+    "ним","здесь","этом","один","почти","мой","тем","чтобы","нее","сейчас","были","куда","зачем","всех",
+    "никогда","можно","при","наконец","два","об","другой","хоть","после","над","больше","тот","через",
+    "эти","нас","про","всего","них","какая","много","разве","три","эту","моя","впрочем","хорошо","свою",
+    "этой","перед","иногда","лучше","чуть","том","нельзя","такой","им","более","всегда","конечно","всю",
+    "между",
+}
+
+
+def read_termfreq(path: Path, *, drop_stopwords: bool = True) -> list[tuple[str, int]]:
     rows: list[tuple[str, int]] = []
     with path.open("r", encoding="utf-8", newline="") as f:
         r = csv.reader(f)
-        header = next(r, None)  
+        _ = next(r, None)  # header
         for row in r:
             if not row or len(row) < 2:
                 continue
             term = (row[0] or "").strip()
             if not term:
                 continue
+
+            if drop_stopwords and term in STOPWORDS:
+                continue
+
             try:
                 freq = int(row[1])
             except ValueError:
                 continue
+
             if freq > 0:
                 rows.append((term, freq))
     return rows
@@ -30,15 +51,20 @@ def main() -> int:
     ap.add_argument("--top", type=int, default=20, help="Top-N terms by collection frequency")
     ap.add_argument("--hapax", type=int, default=20, help="How many freq=1 example terms to print")
     ap.add_argument("--seed", type=int, default=42, help="Random seed for sampling freq=1 examples")
+    ap.add_argument(
+        "--keep-stopwords",
+        action="store_true",
+        help="Do not filter stopwords (by default stopwords are removed).",
+    )
     args = ap.parse_args()
 
     termfreq_path = Path(args.termfreq)
     if not termfreq_path.exists():
         raise SystemExit(f"Not found: {termfreq_path}")
 
-    rows = read_termfreq(termfreq_path)
+    rows = read_termfreq(termfreq_path, drop_stopwords=not args.keep_stopwords)
     if not rows:
-        raise SystemExit(f"No data in: {termfreq_path}")
+        raise SystemExit(f"No data in (after filtering): {termfreq_path}")
 
     total_terms = len(rows)
     total_tokens = sum(freq for _, freq in rows)

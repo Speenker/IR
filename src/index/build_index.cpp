@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstring>
 #include <ctime>
+#include <cmath>
 
 
 static void* xmalloc(size_t n) {
@@ -26,13 +27,13 @@ static uint32_t fnv1a32(const char* s) {
     for (; *s; ++s) { h ^= (unsigned char)(*s); h *= 16777619u; }
     return h ? h : 1u;
 }
-static unsigned char* read_file(const char* path, size_t* out_n, size_t limit_bytes) {
+unsigned char* read_file(const char* path, size_t* out_n, size_t limit_bytes) {
     FILE* f = std::fopen(path, "rb");
     if (!f) return NULL;
-    if (std::fseek(f, 0, SEEK_END) != 0) { std::fclose(f); return NULL; }
-    long sz = std::ftell(f);
+    if (_fseeki64(f, 0, SEEK_END) != 0) { std::fclose(f); return NULL; }
+    __int64 sz = _ftelli64(f);
     if (sz < 0) { std::fclose(f); return NULL; }
-    if (std::fseek(f, 0, SEEK_SET) != 0) { std::fclose(f); return NULL; }
+    if (_fseeki64(f, 0, SEEK_SET) != 0) { std::fclose(f); return NULL; }
     if (limit_bytes > 0 && (size_t)sz > limit_bytes) { std::fclose(f); return NULL; }
 
     unsigned char* buf = (unsigned char*)xmalloc((size_t)sz + 1);
@@ -46,6 +47,61 @@ static void write_u16(FILE* f, uint16_t v) { std::fwrite(&v, 2, 1, f); }
 static void write_u32(FILE* f, uint32_t v) { std::fwrite(&v, 4, 1, f); }
 static void write_u64(FILE* f, uint64_t v) { std::fwrite(&v, 8, 1, f); }
 static uint16_t clamp_u16(size_t n) { return (n > 65535u) ? 65535u : (uint16_t)n; }
+
+static const char* stop_words[] = {
+    "и", "в", "не", "на", "с", "по", "для", "как", "из", "к", "а", "то", "что", "это", "он", "она", "оно", "они", "мы", "вы", "я", "его", "ее", "их", "наш", "ваш", "мой", "твой",
+    "этот", "тот", "такой", "какой", "где", "когда", "почему", "если", "или", "но", "да", "нет", "ну", "вот", "здесь", "там", "тут", "туда", "сюда",
+    "от", "до", "из", "к", "на", "под", "над", "за", "перед", "после", "во", "со", "про", "через", "между", "без", "для", "о", "об", "при", "по", "с", "у"
+};
+static int num_stop_words = sizeof(stop_words)/sizeof(stop_words[0]);
+static int is_stop_word(const char* s) {
+    for(int i=0; i<num_stop_words; i++) if(std::strcmp(s, stop_words[i]) == 0) return 1;
+    return 0;
+}
+
+struct NormEntry {
+    uint32_t docid;
+    double accum;
+    NormEntry* next;
+};
+
+struct PosEntry {
+    uint32_t docid;
+    uint64_t pos;
+    PosEntry* next;
+};
+
+#define NORM_HT_SIZE 10007
+static NormEntry* norm_ht[NORM_HT_SIZE];
+static PosEntry* pos_ht[NORM_HT_SIZE];
+
+static NormEntry* norm_find(uint32_t docid) {
+    uint32_t h = docid % NORM_HT_SIZE;
+    for(NormEntry* e = norm_ht[h]; e; e = e->next) if(e->docid == docid) return e;
+    return NULL;
+}
+
+static void norm_add(uint32_t docid, double tfidf_sq) {
+    NormEntry* e = norm_find(docid);
+    if(!e) {
+        e = (NormEntry*)xmalloc(sizeof(NormEntry));
+        e->docid = docid;
+        e->accum = 0;
+        uint32_t h = docid % NORM_HT_SIZE;
+        e->next = norm_ht[h];
+        norm_ht[h] = e;
+    }
+    e->accum += tfidf_sq;
+}
+
+static void pos_add(uint32_t docid, uint64_t pos) {
+    PosEntry* e = (PosEntry*)xmalloc(sizeof(PosEntry));
+    e->docid = docid;
+    e->pos = pos;
+    uint32_t h = docid % NORM_HT_SIZE;
+    e->next = pos_ht[h];
+    pos_ht[h] = e;
+}
 
 static void normalize_seps(char* s) {
 #ifndef _WIN32
@@ -71,7 +127,7 @@ static void join_path(char* out, int outcap, const char* root, const char* rel) 
     normalize_seps(out);
 }
 
-static int csv_get_field(const char* line, int field_idx, char* out, int out_cap) {
+int csv_get_field(const char* line, int field_idx, char* out, int out_cap) {
     int idx = 0;
     int in_q = 0;
     int o = 0;
@@ -91,7 +147,7 @@ static int csv_get_field(const char* line, int field_idx, char* out, int out_cap
     out[o] = 0;
     return (idx >= field_idx) ? 1 : 0;
 }
-static int csv_find_col(const char* header_line, const char* col_name) {
+int csv_find_col(const char* header_line, const char* col_name) {
     char tmp[256];
     for (int i = 0; i < 256; i++) {
         tmp[0] = 0;
@@ -155,13 +211,35 @@ static uint32_t to_lower_ru(uint32_t cp) {
     return cp;
 }
 static uint32_t yo_to_e(uint32_t cp) {
-    if (cp == 0x0451) return 0x0435; 
-    if (cp == 0x0401) return 0x0415; 
+    if (cp == 0x0451) return 0x0435;
+    if (cp == 0x0401) return 0x0415;
     return cp;
 }
 
+static double simple_log(double x) {
+    if (x <= 0) return 0.0;
 
-static void ru_stem_inplace(char* s) {
+    double y = x - 1.0;
+    if (y > 1.0) {
+        return simple_log(x / 2.0) + 0.693147;
+    }
+
+    double result = 0.0;
+    double term = y;
+    int n = 1;
+
+    while (n < 50 && term > 1e-10) {
+        if (n % 2 == 1) {
+            result += term / n;
+        }
+        term *= y;
+        n++;
+    }
+
+    return result;
+}
+
+void ru_stem_inplace(char* s) {
     int len = (int)std::strlen(s);
     if (len <= 3) return;
 
@@ -192,7 +270,7 @@ struct Posting {
     uint32_t tf;
 };
 
-static void encode_delta_vbyte(const Posting* postings, uint32_t n, uint8_t** out_buf, size_t* out_len) {
+void encode_delta_vbyte(const Posting* postings, uint32_t n, uint8_t** out_buf, size_t* out_len) {
     if (n == 0) {
         *out_buf = NULL;
         *out_len = 0;
@@ -374,9 +452,9 @@ static char* extract_title_from_text(const unsigned char* buf, size_t n, size_t 
 }
 
 
-static void tokenize_and_index(const unsigned char* s, size_t n,
-                               uint32_t docid, int keep_numbers, int yo2e, int min_len,
-                               uint64_t* io_tokens_total, uint64_t* io_token_chars_total, uint64_t* io_doc_len) {
+void tokenize_and_index(const unsigned char* s, size_t n,
+                                uint32_t docid, int keep_numbers, int yo2e, int min_len,
+                                uint64_t* io_tokens_total, uint64_t* io_token_chars_total, uint64_t* io_doc_len) {
     char tok[512];
     int tlen_bytes = 0;
     int tlen_chars = 0;
@@ -404,7 +482,7 @@ static void tokenize_and_index(const unsigned char* s, size_t n,
 
                
                 ru_stem_inplace(tok);
-                if ((int)std::strlen(tok) >= min_len) {
+                if ((int)std::strlen(tok) >= min_len && !is_stop_word(tok)) {
                     TermEntry* e = term_find_or_add(tok);
                     term_add_docid(e, docid);
                     if (io_tokens_total) (*io_tokens_total)++;
@@ -422,7 +500,7 @@ static void tokenize_and_index(const unsigned char* s, size_t n,
 
         
         ru_stem_inplace(tok);
-        if ((int)std::strlen(tok) >= min_len) {
+        if ((int)std::strlen(tok) >= min_len && !is_stop_word(tok)) {
             TermEntry* e = term_find_or_add(tok);
             term_add_docid(e, docid);
             if (io_tokens_total) (*io_tokens_total)++;
@@ -455,7 +533,7 @@ struct FwdHeader {
     uint8_t reserved[32];
 };
 
-static int write_inverted(const char* path, TermPtr* terms, uint32_t term_count, uint32_t doc_count) {
+int write_inverted(const char* path, TermPtr* terms, uint32_t term_count, uint32_t doc_count) {
     FILE* f = std::fopen(path, "wb");
     if (!f) { std::fprintf(stderr, "ERROR: cannot write %s\n", path); return 0; }
 
@@ -523,7 +601,7 @@ static void usage() {
     );
 }
 
-int main(int argc, char** argv) {
+int build_index_main(int argc, char** argv) {
     const char* manifest = NULL;
     const char* outdir = "index";
     const char* root = ".";
@@ -646,7 +724,7 @@ int main(int argc, char** argv) {
         tokenize_and_index(text, ntext, docid, keep_numbers, yo2e, min_len, &tokens_total, &token_chars_total, &doc_len);
         std::free(text);
 
-        uint64_t rec_off = (uint64_t)std::ftell(fwd);
+        uint64_t rec_off = (uint64_t)_ftelli64(fwd);
         offsets[docid] = rec_off;
 
         write_u32(fwd, docid);
@@ -660,6 +738,9 @@ int main(int argc, char** argv) {
         std::fwrite(title, 1, title_len, fwd);
 
         write_u32(fwd, (uint32_t)doc_len);
+        pos_add(docid, (uint64_t)_ftelli64(fwd));
+        double placeholder = 0.0;
+        std::fwrite(&placeholder, sizeof(double), 1, fwd);
 
         std::free(title);
 
@@ -669,20 +750,50 @@ int main(int argc, char** argv) {
 
     std::fclose(mf);
 
-   
+    uint32_t range = max_docid_seen - min_docid_seen + 1;
+
     uint64_t uniq_terms = 0, term_chars = 0;
     finalize_postings(&uniq_terms, &term_chars);
 
-   
+    // Compute norms
+    uint32_t term_count_u32 = 0;
+    TermPtr* terms = collect_terms(&term_count_u32);
+    for(uint32_t i=0; i<term_count_u32; i++){
+        TermEntry* e = terms[i].e;
+        if(e->df > 0){
+            double idf = simple_log((double)docs / (double)e->df);
+            for(uint32_t j=0; j<e->df; j++){
+                uint32_t docid = e->postings[j].docid;
+                double tf = 1.0 + simple_log((double)e->postings[j].tf);
+                double tfidf = tf * idf;
+                norm_add(docid, tfidf * tfidf);
+            }
+        }
+    }
+
     fh.doc_count = (uint32_t)docs;
     fh.min_docid = min_docid_seen;
     fh.max_docid = max_docid_seen;
-    fh.offsets_off = (uint64_t)std::ftell(fwd);
+    fh.offsets_off = (uint64_t)_ftelli64(fwd);
 
     for (uint32_t d = fh.min_docid; d <= fh.max_docid; d++) {
         uint64_t off = (d < offsets_cap) ? offsets[d] : 0;
         write_u64(fwd, off);
         if (d == 0xFFFFFFFFu) break;
+    }
+
+    // Write norms
+    for(int h=0; h<NORM_HT_SIZE; h++) for(PosEntry* p = pos_ht[h]; p; p = p->next) {
+        NormEntry* e = norm_find(p->docid);
+        double norm = e ? sqrt(e->accum) : 0.0;
+        _fseeki64(fwd, (__int64)p->pos, SEEK_SET);
+        std::fwrite(&norm, sizeof(double), 1, fwd);
+    }
+
+    // Free hashes
+    for(int h=0; h<NORM_HT_SIZE; h++) {
+        for(NormEntry* e = norm_ht[h]; e; ) { NormEntry* next = e->next; std::free(e); e = next; }
+        for(PosEntry* p = pos_ht[h]; p; ) { PosEntry* next = p->next; std::free(p); p = next; }
     }
 
     std::fflush(fwd);
@@ -692,8 +803,8 @@ int main(int argc, char** argv) {
     if (offsets) std::free(offsets);
 
   
-    uint32_t term_count_u32 = 0;
-    TermPtr* terms = collect_terms(&term_count_u32);
+    term_count_u32 = 0;
+    terms = collect_terms(&term_count_u32);
     if (!write_inverted(inv_path, terms, term_count_u32, (uint32_t)docs)) {
         std::fprintf(stderr, "ERROR: failed to write inverted index\n");
         std::free(terms);
@@ -718,3 +829,9 @@ int main(int argc, char** argv) {
     std::fprintf(stderr, "Wrote: %s\n", inv_path);
     return 0;
 }
+
+#ifndef TEST_BUILD_INDEX
+int main(int argc, char** argv) {
+    return build_index_main(argc, argv);
+}
+#endif

@@ -7,6 +7,25 @@
 static void* xmalloc(size_t n){ void* p=std::malloc(n); if(!p){std::fprintf(stderr,"OOM\n"); std::exit(2);} return p; }
 static void* xrealloc(void* p,size_t n){ void* q=std::realloc(p,n); if(!q){std::fprintf(stderr,"OOM\n"); std::exit(2);} return q; }
 static char* xstrdup(const char* s){ size_t n=std::strlen(s); char* p=(char*)xmalloc(n+1); std::memcpy(p,s,n+1); return p; }
+static const char* stop_words[] = {
+    "и","в","во","не","что","он","на","я","с","со","как","а","то","все","она","так","его","но","да",
+    "ты","к","у","же","вы","за","бы","по","ее","мне","было","вот","от","меня","еще","нет","о","из",
+    "ему","теперь","когда","даже","ну","вдруг","ли","если","уже","или","ни","быть","был","него","до",
+    "вас","нибудь","опять","уж","вам","ведь","там","потом","себя","ничего","ей","может","они","тут",
+    "где","есть","надо","ней","для","мы","тебя","их","чем","была","сам","чтоб","без","будто","чего",
+    "раз","тоже","себе","под","будет","ж","тогда","кто","этот","того","потому","этого","какой","совсем",
+    "ним","здесь","этом","один","почти","мой","тем","чтобы","нее","сейчас","были","куда","зачем","всех",
+    "никогда","можно","при","наконец","два","об","другой","хоть","после","над","больше","тот","через",
+    "эти","нас","про","всего","них","какая","много","разве","три","эту","моя","впрочем","хорошо","свою",
+    "этой","перед","иногда","лучше","чуть","том","нельзя","такой","им","более","всегда","конечно","всю",
+    "между",
+};
+static int num_stop_words = sizeof(stop_words)/sizeof(stop_words[0]);
+int is_stop_word(const char* s) {
+    for(int i=0; i<num_stop_words; i++) if(std::strcmp(s, stop_words[i]) == 0) return 1;
+    return 0;
+}
+
 static void normalize_seps(char* s){
 #ifndef _WIN32
     for (; *s; ++s) if (*s=='\\') *s='/';
@@ -62,7 +81,8 @@ struct Index {
     uint64_t* fwd_offsets;
     uint32_t all_docs_n;
     uint32_t* all_docs;
-    uint32_t* doc_lengths; 
+    uint32_t* doc_lengths;
+    double* doc_norms;
 };
 
 
@@ -107,7 +127,7 @@ static uint32_t yo_to_e(uint32_t cp){
 }
 
 
-static double simple_log(double x) {
+double simple_log(double x) {
     if (x <= 0) return 0.0;
     
 
@@ -132,7 +152,7 @@ static double simple_log(double x) {
     return result;
 }
 
-static Posting* decode_delta_vbyte_postings(const uint8_t* buf, size_t len, uint32_t n) {
+Posting* decode_delta_vbyte_postings(const uint8_t* buf, size_t len, uint32_t n) {
     Posting* postings = (Posting*)xmalloc(sizeof(Posting) * (size_t)n);
     size_t pos = 0;
     uint32_t idx = 0;
@@ -195,7 +215,7 @@ static void ru_stem_inplace(char* s) {
     }
 }
 
-static char* normalize_term(const char* s_in, int yo2e){
+char* normalize_term(const char* s_in, int yo2e){
   
     const unsigned char* s=(const unsigned char*)s_in;
     size_t n=std::strlen(s_in);
@@ -227,7 +247,7 @@ static int cmp_dict_term(const void* a, const void* b){
 }
 
 static int dict_find(Index* idx, const char* term){
-    
+
     int lo=0, hi=(int)idx->dict_n-1;
     while(lo<=hi){
         int mid=(lo+hi)/2;
@@ -238,8 +258,19 @@ static int dict_find(Index* idx, const char* term){
     return -1;
 }
 
+static int find_doc_index(Index* idx, uint32_t docid){
+    int lo=0, hi=(int)idx->all_docs_n-1;
+    while(lo<=hi){
+        int mid=(lo+hi)/2;
+        uint32_t d = idx->all_docs[mid];
+        if(d==docid) return mid;
+        if(d<docid) lo=mid+1; else hi=mid-1;
+    }
+    return -1;
+}
+
 static uint32_t* load_postings(Index* idx, uint64_t off, uint32_t* out_n){
-    std::fseek(idx->finv, (long)off, SEEK_SET);
+    _fseeki64(idx->finv, (__int64)off, SEEK_SET);
     uint32_t df=read_u32(idx->finv);
     if (idx->ih.version == 1) {
         uint32_t* a=(uint32_t*)xmalloc(sizeof(uint32_t)* (size_t)df);
@@ -269,8 +300,8 @@ static uint64_t fwd_offset(Index* idx, uint32_t docid){
 static int fwd_get(Index* idx, uint32_t docid, char* title, int title_cap, char* url, int url_cap){
     uint64_t off=fwd_offset(idx, docid);
     if(off==0) return 0;
-    
-    std::fseek(idx->ffwd, (long)off, SEEK_SET);
+
+    _fseeki64(idx->ffwd, (__int64)off, SEEK_SET);
     uint32_t did=read_u32(idx->ffwd);
     if(did!=docid) return 0;
     
@@ -322,7 +353,7 @@ static int fwd_get(Index* idx, uint32_t docid, char* title, int title_cap, char*
 }
 
 
-static uint32_t* list_and(const uint32_t* a, uint32_t na, const uint32_t* b, uint32_t nb, uint32_t* out_n){
+uint32_t* list_and(const uint32_t* a, uint32_t na, const uint32_t* b, uint32_t nb, uint32_t* out_n){
     uint32_t* out=(uint32_t*)xmalloc(sizeof(uint32_t)*(size_t)((na<nb)?na:nb));
     uint32_t i=0,j=0,k=0;
     while(i<na && j<nb){
@@ -333,7 +364,7 @@ static uint32_t* list_and(const uint32_t* a, uint32_t na, const uint32_t* b, uin
     *out_n=k;
     return out;
 }
-static uint32_t* list_or(const uint32_t* a, uint32_t na, const uint32_t* b, uint32_t nb, uint32_t* out_n){
+uint32_t* list_or(const uint32_t* a, uint32_t na, const uint32_t* b, uint32_t nb, uint32_t* out_n){
     uint32_t* out=(uint32_t*)xmalloc(sizeof(uint32_t)*(size_t)(na+nb));
     uint32_t i=0,j=0,k=0;
     while(i<na || j<nb){
@@ -344,7 +375,7 @@ static uint32_t* list_or(const uint32_t* a, uint32_t na, const uint32_t* b, uint
     *out_n=k;
     return out;
 }
-static uint32_t* list_not(const uint32_t* universe, uint32_t nu, const uint32_t* b, uint32_t nb, uint32_t* out_n){
+uint32_t* list_not(const uint32_t* universe, uint32_t nu, const uint32_t* b, uint32_t nb, uint32_t* out_n){
     uint32_t* out=(uint32_t*)xmalloc(sizeof(uint32_t)*(size_t)nu);
     uint32_t i=0,j=0,k=0;
     while(i<nu){
@@ -371,7 +402,7 @@ static Tok* toks_push(Tok* arr, uint32_t* n, uint32_t* cap, Tok x){
     return arr;
 }
 
-static Tok* tokenize_basic(const char* q, uint32_t* out_n, int yo2e){
+Tok* tokenize_basic(const char* q, uint32_t* out_n, int yo2e){
     Tok* arr=NULL; uint32_t n=0, cap=0;
     const char* p=q;
     while(*p){
@@ -394,7 +425,7 @@ static Tok* tokenize_basic(const char* q, uint32_t* out_n, int yo2e){
         }
         buf[bl]=0;
         char* norm = normalize_term(buf, yo2e);
-        if(norm[0]){ Tok x={T_TERM,norm}; arr=toks_push(arr,&n,&cap,x); }
+        if(norm[0] && !is_stop_word(norm)){ Tok x={T_TERM,norm}; arr=toks_push(arr,&n,&cap,x); }
         else std::free(norm);
     }
     *out_n=n;
@@ -404,7 +435,7 @@ static Tok* tokenize_basic(const char* q, uint32_t* out_n, int yo2e){
 static int is_operand_or_close(TokType t){ return t==T_TERM || t==T_RP; }
 static int is_operand_or_open_or_not(TokType t){ return t==T_TERM || t==T_LP || t==T_NOT; }
 
-static Tok* inject_implicit_and(Tok* in, uint32_t nin, uint32_t* out_n){
+Tok* inject_implicit_and(Tok* in, uint32_t nin, uint32_t* out_n){
     Tok* out=NULL; uint32_t n=0, cap=0;
     for(uint32_t i=0;i<nin;i++){
         out=toks_push(out,&n,&cap,in[i]);
@@ -429,7 +460,7 @@ static int prec(TokType t){
 }
 static int is_right_assoc(TokType t){ return t==T_NOT; }
 
-static Tok* to_postfix(const Tok* in, uint32_t nin, uint32_t* out_n){
+Tok* to_postfix(const Tok* in, uint32_t nin, uint32_t* out_n){
     Tok* out=NULL; uint32_t on=0, ocap=0;
     Tok* st=NULL;  uint32_t sn=0, scap=0;
 
@@ -499,12 +530,12 @@ static void quick_sort(RankedResult* arr, int left, int right) {
     if (i < right) quick_sort(arr, i, right);
 }
 
-static double compute_tf_idf(Index* idx, uint32_t docid, const char* term){
+double compute_tf_idf(Index* idx, uint32_t docid, const char* term){
     int pos=dict_find(idx, term);
     if(pos<0) return 0.0;
     
 
-    std::fseek(idx->finv, (long)idx->dict[pos].postings_off, SEEK_SET);
+    _fseeki64(idx->finv, (__int64)idx->dict[pos].postings_off, SEEK_SET);
     uint32_t df=read_u32(idx->finv);
     uint32_t tf_value = 0;
     
@@ -627,7 +658,7 @@ static int load_index(Index* idx, const char* inv_path, const char* fwd_path){
    
     uint32_t range = (idx->fh.max_docid >= idx->fh.min_docid) ? (idx->fh.max_docid - idx->fh.min_docid + 1) : 0;
     idx->fwd_offsets = (uint64_t*)xmalloc(sizeof(uint64_t)*(size_t)range);
-    std::fseek(idx->ffwd, (long)idx->fh.offsets_off, SEEK_SET);
+    _fseeki64(idx->ffwd, (__int64)idx->fh.offsets_off, SEEK_SET);
     for(uint32_t i=0;i<range;i++) idx->fwd_offsets[i]=read_u64(idx->ffwd);
 
    
@@ -639,6 +670,21 @@ static int load_index(Index* idx, const char* inv_path, const char* fwd_path){
         }
     }
     idx->all_docs_n = k;
+
+    idx->doc_lengths = (uint32_t*)xmalloc(sizeof(uint32_t) * (size_t)idx->all_docs_n);
+    idx->doc_norms = (double*)xmalloc(sizeof(double) * (size_t)idx->all_docs_n);
+    for(uint32_t i=0; i<idx->all_docs_n; i++){
+        uint32_t docid = idx->all_docs[i];
+        uint64_t off = fwd_offset(idx, docid);
+        _fseeki64(idx->ffwd, (__int64)off, SEEK_SET);
+        read_u32(idx->ffwd); // docid
+        uint16_t ulen = read_u16(idx->ffwd);
+        std::fseek(idx->ffwd, (long)ulen, SEEK_CUR); // skip url
+        uint16_t tlen = read_u16(idx->ffwd);
+        std::fseek(idx->ffwd, (long)tlen, SEEK_CUR); // skip title
+        idx->doc_lengths[i] = read_u32(idx->ffwd);
+        std::fread(&idx->doc_norms[i], sizeof(double), 1, idx->ffwd);
+    }
     return 1;
 }
 
@@ -649,6 +695,8 @@ static void free_index(Index* idx){
     }
     if(idx->fwd_offsets) std::free(idx->fwd_offsets);
     if(idx->all_docs) std::free(idx->all_docs);
+    if(idx->doc_lengths) std::free(idx->doc_lengths);
+    if(idx->doc_norms) std::free(idx->doc_norms);
     if(idx->finv) std::fclose(idx->finv);
     if(idx->ffwd) std::fclose(idx->ffwd);
 }
@@ -661,7 +709,7 @@ static void usage(){
     );
 }
 
-int main(int argc, char** argv){
+int search_cli_main(int argc, char** argv){
     const char* inv="index/inv.bin";
     const char* fwd="index/fwd.bin";
     const char* queries_path=NULL;
@@ -751,7 +799,7 @@ int main(int argc, char** argv){
                         if (wlen > 0) {
                             word[wlen] = 0;
                             char* norm = normalize_term(word, 1);
-                            if (strlen(norm) > 0) {
+                            if (strlen(norm) > 0 && !is_stop_word(norm)) {
                                 strcpy(temp_terms[terms_count++], norm);
                             }
                             std::free(norm);
@@ -765,7 +813,7 @@ int main(int argc, char** argv){
                 if (wlen > 0) {
                     word[wlen] = 0;
                     char* norm = normalize_term(word, 1);
-                    if (strlen(norm) > 0) {
+                    if (strlen(norm) > 0 && !is_stop_word(norm)) {
                         strcpy(temp_terms[terms_count++], norm);
                     }
                     std::free(norm);
@@ -785,6 +833,10 @@ int main(int argc, char** argv){
                         }
                         
                         if (total_score > 0.0) {
+                            int idx_i = find_doc_index(&idx, docid);
+                            if(idx_i >=0 && idx.doc_norms[idx_i] > 0.0){
+                                total_score /= idx.doc_norms[idx_i];
+                            }
                             results[valid_count].docid = docid;
                             results[valid_count].score = total_score;
                             valid_count++;
@@ -818,3 +870,9 @@ int main(int argc, char** argv){
     free_index(&idx);
     return 0;
 }
+
+#ifndef TEST_SEARCH_CLI
+int main(int argc, char** argv) {
+    return search_cli_main(argc, argv);
+}
+#endif

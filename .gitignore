@@ -7,6 +7,9 @@ index/fwd.bin
 scripts/bootstrap_mongo_from_lr1.py
 configs/robot.yaml
 .pytest_cache/
+media/
+Report.tex
+scripts/add_raw_html_to_mongo.py
 bson-1.0.dll
 mongoc-1.0.dll
 utf8proc.dll
